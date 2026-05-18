@@ -85,4 +85,5 @@ with the **AMBER99SB-ILDN** force field and **GAFF2** parameters for the ligand.
 ├── rmsf.xvg
 ├── gyrate.xvg
 └── dist_ser70_C7.xvg             # Ser70–Avibactam C7 distance
+# help from claude for the format beyong
 ```
