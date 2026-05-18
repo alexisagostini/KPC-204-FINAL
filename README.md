@@ -11,11 +11,11 @@
 - [Project Overview](#project-overview)
 - [Repository Structure](#repository-structure)
 - [Dependencies](#dependencies)
-- [Current Status](#CURRENT STATUS)
-- [Pipeline summary](#PIPELINE SUMMARY)
-- [Full PIPELINE with commande](#Full PIPELINE with commande)
-- [Analysis already done](#ANALYSIS ALREADY DONE)
-- [Immediate priorities](#IMMEDIATE PRIORITIES)
+- [Current Status](#CURRENT-STATUS)
+- [Pipeline summary](#PIPELINE-SUMMARY)
+- [Full PIPELINE with commande](#Full-PIPELINE-with-commande)
+- [Analysis already done](#ANALYSIS-ALREADY DONE)
+- [Immediate priorities](#IMMEDIATE-PRIORITIES)
 
 
 ## Project Overview
