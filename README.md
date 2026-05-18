@@ -38,7 +38,7 @@ with the **AMBER99SB-ILDN** force field and **GAFF2** parameters for the ligand.
 
 
 ## Repository Structure
-
+```
 ├── docking/
 │   ├── avibactam_REAL.pdbqt          # Correct avibactam ligand (CID 9835049)
 │   ├── KPC2_cristallo/
@@ -85,3 +85,4 @@ with the **AMBER99SB-ILDN** force field and **GAFF2** parameters for the ligand.
 ├── rmsf.xvg
 ├── gyrate.xvg
 └── dist_ser70_C7.xvg             # Ser70–Avibactam C7 distance
+```
