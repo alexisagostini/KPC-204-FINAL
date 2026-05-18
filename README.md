@@ -14,7 +14,7 @@
 - [Current Status](#CURRENT-STATUS)
 - [Pipeline summary](#PIPELINE-SUMMARY)
 - [Full PIPELINE with commande](#Full-PIPELINE-with-commande)
-- [Analysis already done](#ANALYSIS-ALREADY-DONE)
+- [Analysis already done](#ANALYSIS-ALREADY-DONE-(deprecated-runs-—-wrong-ligand))
 - [Immediate priorities](#IMMEDIATE-PRIORITIES)
 
 
