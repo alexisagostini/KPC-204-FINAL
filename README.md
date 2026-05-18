@@ -370,12 +370,3 @@ done
 3. Post-MD analysis: RMSD, RMSF, Rg, Ser70–C7 distance, ligand RMSD
 4. Compare KPC2 vs KPC204 binding stability
 
-## STYLE PREFERENCES
-
-- Always provide complete, copy-pasteable bash commands
-- Use screen sessions for long runs: screen -S <name>, detach with Ctrl+A D
-- Never use Ctrl+Z (suspends processes)
-- Check GPU availability with nvidia-smi before assigning gpu_id
-- Prefer -maxwarn 2 on grompp to handle minor topology warnings
-- For EM blocking: try -nb cpu -pme cpu -bonded cpu as fallback
-
