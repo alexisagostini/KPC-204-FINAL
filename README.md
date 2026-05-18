@@ -11,16 +11,11 @@
 - [Project Overview](#project-overview)
 - [Repository Structure](#repository-structure)
 - [Dependencies](#dependencies)
-- [Workflow](#workflow)
-  - [1. Ligand Preparation](#1-ligand-preparation)
-  - [2. Molecular Docking](#2-molecular-docking)
-  - [3. System Preparation](#3-system-preparation)
-  - [4. MD Simulations](#4-md-simulations)
-  - [5. Analysis](#5-analysis)
-- [Systems](#systems)
-- [Key Results](#key-results)
-- [Known Issues & Notes](#known-issues--notes)
-- [Citation](#citation)
+- [Current Status](#CURRENT STATUS)
+- [Pipeline summary](#PIPELINE SUMMARY)
+- [Full PIPELINE with commande](#Full PIPELINE with commande)
+- [Analysis already done](#ANALYSIS ALREADY DONE)
+- [Immediate priorities](#IMMEDIATE PRIORITIES)
 
 
 ## Project Overview
