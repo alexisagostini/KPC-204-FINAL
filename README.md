@@ -191,21 +191,14 @@ posre_avibactam_REAL.itp
 ### STEP 2 — Molecular docking (AutoDock Vina)
 ```
 cd $DOCK
-
-# Convert ligand SDF to PDBQT
-obabel $ROOT/ligand/avibactam_REAL.sdf -O $DOCK/avibactam_REAL.pdbqt \
+obabel $ROOT/ligand/avibactam_REAL.sdf -O avibactam_REAL.pdbqt \
        --partialcharge gasteiger -h
-
-# Update config files to point to correct ligand
 sed -i "s|avibactam.pdbqt|avibactam_REAL.pdbqt|g" \
-    $DOCK/KPC2_cristallo/vina_config.txt \
-    $DOCK/KPC204_swissmodel/vina_config.txt
+    KPC2_cristallo/vina_config.txt KPC204_swissmodel/vina_config.txt
+vina --config KPC2_cristallo/vina_config.txt
+vina --config KPC204_swissmodel/vina_config.txt
 
-# Run docking
-vina --config $DOCK/KPC2_cristallo/vina_config.txt
-vina --config $DOCK/KPC204_swissmodel/vina_config.txt
-
-# Extract best pose (MODEL 1) for each system
+# Extract best pose
 for sys in KPC2_cristallo KPC204_swissmodel; do
     python3 -c "
 lines = open('${sys}/${sys}_docked.pdbqt').readlines()
@@ -218,12 +211,7 @@ open('${sys}/${sys}_best_pose.pdbqt','w').writelines(out)
 "
     obabel $DOCK/${sys}/${sys}_best_pose.pdbqt \
            -O $DOCK/${sys}/${sys}_best_pose.pdb 2>/dev/null
-    echo "Done: ${sys}"
 done
-
-# Verify: no Cl or F in best poses (second check)
-grep "^ATOM" $DOCK/KPC2_cristallo/KPC2_cristallo_best_pose.pdbqt \
-    | awk '{print $NF}' | sort | uniq -c
 ```
 ### STEP 3 — Create system directories and copy files
 ```
@@ -242,85 +230,133 @@ done
 ```
 for sys in KPC2_cristallo KPC204_swissmodel; do
     cd $BASE/${sys}_v2
-    gmx pdb2gmx \
-        -f protein_clean.pdb \
-        -o protein.gro \
-        -p topol.top \
-        -water spce \
-        -ff amber99sb-ildn \
-        -ignh
-    echo "Done pdb2gmx: ${sys}_v2"
+    gmx pdb2gmx -f protein_clean.pdb -o protein.gro -p topol.top \
+                -water spce -ff amber99sb-ildn -ignh
 done
 ```
 ### STEP 5 — Build complex GRO (protein + ligand)
 ```
 for sys in KPC2_cristallo KPC204_swissmodel; do
     cd $BASE/${sys}_v2
-
     NATOM_PROT=$(sed -n '2p' protein.gro | tr -d ' ')
     NATOM_LIG=$(sed -n '2p' MOL.gro | tr -d ' ')
     NATOM_TOTAL=$((NATOM_PROT + NATOM_LIG))
-
     head -1 protein.gro > complex.gro
     echo " $NATOM_TOTAL" >> complex.gro
     sed -n '3,$p' protein.gro | head -n $NATOM_PROT >> complex.gro
     sed -n '3,$p' MOL.gro     | head -n $NATOM_LIG  >> complex.gro
     tail -1 protein.gro >> complex.gro
-
-    echo "${sys}_v2: $NATOM_TOTAL atoms total"
 done
 ```
 ### STEP 6 — Fix topol.top (CRITICAL — atomtypes placement)
 
-GROMACS requires [ atomtypes ] in topol.top, NOT inside MOL.itp.
-ACPYPE puts it in MOL.itp by default → must be moved manually.
+ACPYPE puts [ atomtypes ] inside MOL.itp — GROMACS needs it in topol.top.
+This step moves it to the right place.
+```
+for sys in KPC2_cristallo KPC204_swissmodel; do
+    cd $BASE/${sys}_v2
+    cp MOL.itp MOL.itp.bak && cp topol.top topol.top.bak
+
+    MOLTYPE_LINE=$(grep -n "^\[ moleculetype \]" MOL.itp | head -1 | cut -d: -f1)
+    sed -n "3,$((MOLTYPE_LINE - 1))p" MOL.itp > atomtypes_block.tmp
+    sed -n "${MOLTYPE_LINE},\$p" MOL.itp > MOL_clean.itp && mv MOL_clean.itp MOL.itp
+
+    FFLINE=$(grep -n "forcefield.itp" topol.top | head -1 | cut -d: -f1)
+    sed -i "${FFLINE}r atomtypes_block.tmp" topol.top
+
+    SYSLINE=$(grep -n "^\[ system \]" topol.top | head -1 | cut -d: -f1)
+    sed -i "$((SYSLINE - 1))a #include \"MOL.itp\"\n#include \"posre_MOL.itp\"" topol.top
+    echo "MOL                  1" >> topol.top
+done
+```
+### STEP 7 — Solvate
+```
+for sys in KPC2_cristallo KPC204_swissmodel; do
+    cd $BASE/${sys}_v2
+    gmx editconf -f complex.gro -o complex_box.gro -c -d 1.2 -bt dodecahedron
+    gmx solvate  -cp complex_box.gro -cs spc216.gro -o complex_solv.gro -p topol.top
+done
+```
+### STEP 8 — Add ions
+```
+for sys in KPC2_cristallo KPC204_swissmodel; do
+    cd $BASE/${sys}_v2
+    gmx grompp -f $MDP/ions.mdp -c complex_solv.gro -r complex_solv.gro \
+               -p topol.top -o ions.tpr -maxwarn 2
+    echo "SOL" | gmx genion -s ions.tpr -o complex_ions.gro \
+                 -p topol.top -pname NA -nname CL -neutral -conc 0.15
+done
+```
+### STEP 9 — Energy minimization
+```
+for sys in KPC2_cristallo KPC204_swissmodel; do
+    cd $BASE/${sys}_v2
+    gmx grompp -f $MDP/em.mdp -c complex_ions.gro -r complex_ions.gro \
+               -p topol.top -o em.tpr -maxwarn 2
+    gmx mdrun -v -deffnm em -ntmpi 1 -ntomp 8 -gpu_id 1 -nb gpu
+done
+ ```
+If it hangs → use CPU instead:
+gmx mdrun -v -deffnm em -ntmpi 1 -ntomp 8 -nb cpu -pme cpu -bonded cpu
+
+### STEP 10 — NVT (300 K, 100 ps)
+```
+for sys in KPC2_cristallo KPC204_swissmodel; do
+    cd $BASE/${sys}_v2
+    gmx grompp -f $MDP/nvt.mdp -c em.gro -r em.gro \
+               -p topol.top -o nvt.tpr -maxwarn 2
+    gmx mdrun -v -deffnm nvt -ntmpi 1 -ntomp 8 -gpu_id 1
+done
+```
+### STEP 11 — NPT (1 bar, 100 ps)
+```
+for sys in KPC2_cristallo KPC204_swissmodel; do
+    cd $BASE/${sys}_v2
+    gmx grompp -f $MDP/npt.mdp -c nvt.gro -r nvt.gro -t nvt.cpt \
+               -p topol.top -o npt.tpr -maxwarn 2
+    gmx mdrun -v -deffnm npt -ntmpi 1 -ntomp 8 -gpu_id 1
+done
+```
+### STEP 12 — Production MD (100 ns)
+```
+screen -S md_v2   # detach with Ctrl+A then D — NEVER Ctrl+Z that made me pass lot of time to understand what happen ! 
+
+for sys in KPC2_cristallo KPC204_swissmodel; do
+    cd $BASE/${sys}_v2
+    gmx grompp -f $MDP/md.mdp -c npt.gro -t npt.cpt \
+               -p topol.top -o md.tpr -maxwarn 2
+    gmx mdrun -v -deffnm md -ntmpi 1 -ntomp 8 -gpu_id 1 \
+              -nb gpu -pme gpu -bonded gpu
+done
+```
+### STEP 13 — Analysis (after MD) with a big claude help to fix the code! 
 ```
 for sys in KPC2_cristallo KPC204_swissmodel; do
     cd $BASE/${sys}_v2
 
-    cp MOL.itp   MOL.itp.bak
-    cp topol.top topol.top.bak
+    # Recenter trajectory
+    echo "Protein System" | gmx trjconv -s md.tpr -f md.xtc \
+        -o md_center.xtc -center -pbc mol -ur compact
 
-    # Extract [ atomtypes ] block from MOL.itp
-    MOLTYPE_LINE=$(grep -n "^\[ moleculetype \]" MOL.itp | head -1 | cut -d: -f1)
-    sed -n "3,$((MOLTYPE_LINE - 1))p" MOL.itp > atomtypes_block.tmp
+    # RMSD
+    echo "Backbone Backbone" | gmx rms -s md.tpr -f md_center.xtc \
+        -o rmsd.xvg -tu ns
 
-    # Remove [ atomtypes ] from MOL.itp (keep from [ moleculetype ] onward)
-    sed -n "${MOLTYPE_LINE},\$p" MOL.itp > MOL_clean.itp && mv MOL_clean.itp MOL.itp
+    # RMSF
+    echo "Backbone" | gmx rmsf -s md.tpr -f md_center.xtc \
+        -o rmsf.xvg -res
 
-    # Inject [ atomtypes ] into topol.top after forcefield include
-    FFLINE=$(grep -n "forcefield.itp" topol.top | head -1 | cut -d: -f1)
-    sed -i "${FFLINE}r atomtypes_block.tmp" topol.top
-
-    # Add MOL includes just before [ system ]
-    SYSLINE=$(grep -n "^\[ system \]" topol.top | head -1 | cut -d: -f1)
-    sed -i "$((SYSLINE - 1))a\\
-#include \"MOL.itp\"\\
-#include \"posre_MOL.itp\"" topol.top
-
-    # Add MOL entry in [ molecules ]
-    echo "MOL                  1" >> topol.top
-
-    echo "Topology fixed: ${sys}_v2"
+    # Ser70–Avibactam C7 distance
+    echo "System" | gmx trjconv -s md.tpr -f md_center.xtc \
+        -o frame0.pdb -dump 0 2>/dev/null
+    OG=$(grep " OG  SER A  70" frame0.pdb | awk '{print $2}')
+    C7=$(grep " C7  MOL"        frame0.pdb | awk '{print $2}')
+    printf "[ OG_Ser70 ]\n${OG}\n[ C7_MOL ]\n${C7}\n" > dist_ser70.ndx
+    gmx distance -s md.tpr -f md_center.xtc -n dist_ser70.ndx \
+        -select 'com of group "OG_Ser70" plus com of group "C7_MOL"' \
+        -oall dist_ser70_C7.xvg -tu ns
 done
 ```
-#Expected topol.top structure after fix:
-1. #include "forcefield.itp"
-2. [ atomtypes ]          ← from MOL.itp, placed HERE
-3. (protein topology)
-4. #include "MOL.itp"     ← before [ system ]
-5. #include "posre_MOL.itp"
-6. 6. [ system ]
-7. [ molecules ]
-Protein_chain_A   1
-MOL               1
-SOL               XXXXX
-
-
-
-
-
-
 ## ANALYSIS ALREADY DONE (deprecated runs — wrong ligand)
 
 - md_center.xtc generated for all 4 old systems
